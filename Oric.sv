@@ -117,13 +117,23 @@ module emu
 	// 1 - D-/TX
 	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
-	input   [6:0] USER_IN,
-	output  [6:0] USER_OUT,
+	output	USER_OSD,
+output	USER_MODE,
+input	[7:0] USER_IN,
+output	[7:0] USER_OUT,
 
 	input         OSD_STATUS
 );
 
-assign USER_OUT = '1;
+//assign USER_OUT  = '1;
+
+wire   joy_split, joy_mdsel;
+wire   [5:0] joy_in = {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]};
+assign USER_OUT  = |status[31:30] ? {3'b111,joy_split,3'b111,joy_mdsel} : '1;
+assign USER_MODE = |status[31:30] ;
+assign USER_OSD  = joydb9md_1[7] & joydb9md_1[5]; // A�adir esto para OSD
+
+
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
@@ -144,16 +154,17 @@ assign VIDEO_ARY = status[4] ? 8'd9  : 8'd3;
 localparam CONF_STR = {
 	"Oric;;",
 	"S0,DSK,Mount Drive A:;",
-	"-;",
+"-;",
 	"O3,ROM,Oric Atmos,Oric 1;",
 	"O56,FDD Controller,Auto,Off,On;",
 	"O7,Drive Write,Allow,Prohibit;",
-	"-;",
+	"OUV,Serial SNAC DB9MD,Off,1 Player,2 Players;",
+"-;",
 	"O4,Aspect ratio,4:3,16:9;",
 	"OAC,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
-	"-;",
+"-;",
 	"O8,Stereo,Off,On;",
-	"-;",
+"-;",
 	"R0,Reset & Apply;",
 	"V,v",`BUILD_DATE
 };
@@ -191,7 +202,7 @@ end
 
 wire [10:0] ps2_key;
 
-wire [15:0] joy;
+wire [15:0] joy_USB;
 wire  [1:0] buttons;
 wire        forced_scandoubler;
 wire [31:0] status;
@@ -219,6 +230,29 @@ reg  [31:0] status_out;
 
 wire [21:0] gamma_bus;
 
+wire [15:0] joy = |status[31:30] ? {
+	joydb9md_1[10],// btn_y		-> 7 * Y
+	joydb9md_1[9], // btn_x		-> 6 * X
+	joydb9md_1[4], // btn_b		-> 5 * B
+	joydb9md_1[6], // btn_a		-> 4 * A
+	joydb9md_1[3], // btn_up	-> 3 * U
+	joydb9md_1[2], // btn_down	-> 2 * D
+	joydb9md_1[1], // btn_left	-> 1 * L
+	joydb9md_1[0], // btn_righ	-> 0 * R 
+	} 
+	: joy_USB;
+
+reg [15:0] joydb9md_1,joydb9md_2;
+joy_db9md joy_db9md
+(
+  .clk       ( clk_sys    ), //35-50MHz
+  .joy_split ( joy_split  ),
+  .joy_mdsel ( joy_mdsel  ),
+  .joy_in    ( joy_in     ),
+  .joystick1 ( joydb9md_1 ),
+  .joystick2 ( joydb9md_2 )	  
+);
+
 hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 (
 	.clk_sys(clk_sys),
@@ -226,9 +260,10 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.conf_str(CONF_STR),
 
-	.ps2_key(ps2_key),
+	.joy_raw({joydb9md_1[4],joydb9md_1[6],joydb9md_1[3:0]}),
+.ps2_key(ps2_key),
 
-	.joystick_0(joy),
+	.joystick_0(joy_USB),
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
 	.status(status),
