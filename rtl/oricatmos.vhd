@@ -40,8 +40,7 @@
 
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
-USE ieee.std_logic_arith.ALL;
-USE ieee.std_logic_unsigned.ALL;
+USE ieee.numeric_std.all;
 ENTITY oricatmos IS
 	PORT (
 		CLK_IN : IN STD_LOGIC;
@@ -54,10 +53,10 @@ ENTITY oricatmos IS
 		K7_TAPEOUT : OUT STD_LOGIC;
 		K7_REMOTE : OUT STD_LOGIC;
 
-		PSG_OUT_A : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-		PSG_OUT_B : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-		PSG_OUT_C : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-      PSG_OUT   : OUT STD_LOGIC_VECTOR(9 DOWNTO 0);
+		PSG_OUT_A : OUT UNSIGNED(11 DOWNTO 0);
+		PSG_OUT_B : OUT UNSIGNED(11 DOWNTO 0);
+		PSG_OUT_C : OUT UNSIGNED(11 DOWNTO 0);
+      PSG_OUT   : OUT UNSIGNED(13 DOWNTO 0);
 		
 		VIDEO_CLK : OUT STD_LOGIC;
 		VIDEO_R : OUT STD_LOGIC;
@@ -84,17 +83,26 @@ ENTITY oricatmos IS
 		joystick_1 : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
 		pll_locked : IN STD_LOGIC;
 		disk_enable : IN STD_LOGIC;
-		rom : IN STD_LOGIC;
-		img_mounted : IN STD_LOGIC;
-		img_wp : IN STD_LOGIC;
+		rom : IN STD_LOGIC_VECTOR(1 DOWNTO 0);
+		bios_addr : OUT STD_LOGIC_VECTOR(13 DOWNTO 0);
+		bios_din : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+
+		img_mounted : IN STD_LOGIC_VECTOR (3 DOWNTO 0);
+		img_wp : IN STD_LOGIC_VECTOR (3 DOWNTO 0);
 		img_size : IN STD_LOGIC_VECTOR (31 DOWNTO 0);
-		sd_lba : OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
-		sd_rd : OUT STD_LOGIC;
-		sd_wr : OUT STD_LOGIC;
-		sd_ack : IN STD_LOGIC;
+		sd_lba_fd0 : OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
+		sd_lba_fd1 : OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
+		sd_lba_fd2 : OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
+		sd_lba_fd3 : OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
+		sd_rd : OUT STD_LOGIC_VECTOR (3 DOWNTO 0);
+		sd_wr : OUT STD_LOGIC_VECTOR (3 DOWNTO 0);
+		sd_ack : IN STD_LOGIC_VECTOR (3 DOWNTO 0);
 		sd_buff_addr : IN STD_LOGIC_VECTOR (8 DOWNTO 0);
 		sd_dout : IN STD_LOGIC_VECTOR (7 DOWNTO 0);
-		sd_din : OUT STD_LOGIC_VECTOR (7 DOWNTO 0);
+		sd_din_fd0 : OUT STD_LOGIC_VECTOR (7 DOWNTO 0);
+		sd_din_fd1 : OUT STD_LOGIC_VECTOR (7 DOWNTO 0);
+		sd_din_fd2 : OUT STD_LOGIC_VECTOR (7 DOWNTO 0);
+		sd_din_fd3 : OUT STD_LOGIC_VECTOR (7 DOWNTO 0);
 		sd_dout_strobe : IN STD_LOGIC;
 		sd_din_strobe : IN STD_LOGIC
 	);
@@ -201,28 +209,29 @@ ARCHITECTURE RTL OF oricatmos IS
 		);
 	END COMPONENT;
 
-
-	COMPONENT jt49_bus
-		PORT (
-			clk : IN STD_LOGIC;
-			clk_en : IN STD_LOGIC;
-			rst_n : IN STD_LOGIC;
+COMPONENT psg
+ PORT (
+			clock : IN STD_LOGIC;
+			ce    : IN STD_LOGIC;
+			reset : IN STD_LOGIC;
 			bdir : IN STD_LOGIC;
 			bc1 : IN STD_LOGIC;
 			sel : IN STD_LOGIC;
-			din : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
-			dout : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-			sound : OUT STD_LOGIC_VECTOR(9 DOWNTO 0);
-			A : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-			B : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-			C : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-			sample : OUT STD_LOGIC;
-			IOA_In : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
-			IOA_Out : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-			IOB_In : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
-			IOB_Out : OUT STD_LOGIC_VECTOR(7 DOWNTO 0)
-		);
-	END COMPONENT;
+			d   : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+			q   : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+
+			ioad : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+	      ioaq : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+			iobd : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+			iobq : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+
+			MIX : OUT UNSIGNED (13 DOWNTO 0);
+			A   : OUT UNSIGNED (11 DOWNTO 0);
+			B   : OUT UNSIGNED(11 DOWNTO 0);
+			C   : OUT UNSIGNED(11 DOWNTO 0)
+);
+END COMPONENT;
+
 
 BEGIN
 
@@ -256,6 +265,8 @@ BEGIN
 		ula_WE_SRAM;
 	phi2 <= ula_PHI2;
 
+	bios_addr <= cpu_ad(13 DOWNTO 0);
+	
 	inst_rom0 : ENTITY work.BASIC11A -- Oric Atmos ROM
 		PORT MAP(
 			clk => CLK_IN,
@@ -345,26 +356,31 @@ BEGIN
 			CLK => CLK_IN
 		);
 
-	inst_psg : jt49_bus
-	PORT MAP(
-		clk => CLK_IN,
-		clk_en => ENA_1MHZ,
-		sel => '1',
-		rst_n => RESETn AND KEYB_RESETn,
-		bc1 => psg_bdir,
-		bdir => via_cb2_out,
-		din => via_pa_out,
-		dout => via_pa_in_from_psg,
-		sample => psg_sample_ok,
-		sound => PSG_OUT,
-		A => PSG_OUT_A,
-		B => PSG_OUT_B,
-		C => PSG_OUT_C,
-		IOA_In => (OTHERS => '0'),
-		IOA_Out => ym_o_ioa,
-		IOB_In => (OTHERS => '0')
-	);
 
+
+  psg_a: psg
+  port map (
+      clock       => CLK_IN,
+      ce          => ENA_1MHZ,
+      reset       => RESETn AND KEYB_RESETn,
+      bdir        => via_cb2_out,
+      bc1         => psg_bdir,
+      d           => via_pa_out,
+      q           => via_pa_in_from_psg,
+      a           => PSG_OUT_A,
+      b           => PSG_OUT_B,
+      c           => PSG_OUT_C,
+      mix         => PSG_OUT,
+
+      ioad        => "ZZZZZZZZ",
+      ioaq        => ym_o_ioa,
+      iobd        => "ZZZZZZZZ",
+      iobq        => open,
+
+      sel         => '1'
+    );
+
+	
 	inst_key : keyboard
 	PORT MAP(
 		clk_sys => CLK_IN,
@@ -413,13 +429,19 @@ BEGIN
 		img_mounted => img_mounted,
 		img_wp => img_wp,
 		img_size => img_size,
-		sd_lba => sd_lba,
+		sd_lba_fd0 => sd_lba_fd0,
+		sd_lba_fd1 => sd_lba_fd1,
+		sd_lba_fd2 => sd_lba_fd2,
+		sd_lba_fd3 => sd_lba_fd3,
 		sd_rd => sd_rd,
 		sd_wr => sd_wr,
 		sd_ack => sd_ack,
 		sd_buff_addr => sd_buff_addr,
 		sd_dout => sd_dout,
-		sd_din => sd_din,
+		sd_din_fd0 => sd_din_fd0,
+		sd_din_fd1 => sd_din_fd1,
+		sd_din_fd2 => sd_din_fd2,
+		sd_din_fd3 => sd_din_fd3,
 		sd_dout_strobe => sd_dout_strobe,
 		sd_din_strobe => sd_din_strobe,
 		fdd_ready => fdd_ready,
@@ -457,11 +479,14 @@ BEGIN
 		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND ula_CSIOn = '0' AND cont_IOCONTROLn = '1' THEN
 			cpu_di <= VIA_DO;
 			-- ROM Atmos	
-		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND ula_CSIOn = '1' AND ula_CSROMn = '0' AND cont_MAPn = '1' AND cont_ROMDISn = '1' AND rom = '1' THEN
+		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND ula_CSIOn = '1' AND ula_CSROMn = '0' AND cont_MAPn = '1' AND cont_ROMDISn = '1' AND rom = "00" THEN
 			cpu_di <= ROM_ATMOS_DO;
 			-- ROM Oric 1	
-		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND ula_CSIOn = '1' AND ula_CSROMn = '0' AND cont_MAPn = '1' AND cont_ROMDISn = '1' AND rom = '0' THEN
+		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND ula_CSIOn = '1' AND ula_CSROMn = '0' AND cont_MAPn = '1' AND cont_ROMDISn = '1' AND rom = "01" THEN
 			cpu_di <= ROM_1_DO;
+			-- Loadable ROM
+		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND ula_CSIOn = '1' AND ula_CSROMn = '0' AND cont_MAPn = '1' AND cont_ROMDISn = '1' AND rom = "10" THEN
+			cpu_di <= bios_din;
 			--ROM Microdisc
 		ELSIF cpu_rw = '1' AND ula_phi2 = '1' AND cont_ECE = '0' AND cont_ROMDISn = '0' AND cont_MAPn = '1' THEN
 			cpu_di <= ROM_MD_DO;
