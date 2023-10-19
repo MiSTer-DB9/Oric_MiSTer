@@ -50,7 +50,7 @@ module emu
 	output        VGA_VS,
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
-	output  [1:0] VGA_SL,
+	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
 	output        VGA_DISABLE, // analog out is off
 
@@ -185,7 +185,7 @@ wire   [5:0] JOY_MDIN  = JOY_FLAG[2] ? {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN
 wire         JOY_DATA  = JOY_FLAG[1] ? USER_IN[5] : '1;
 assign       USER_OUT  = JOY_FLAG[2] ? {3'b111,JOY_SPLIT,3'b111,JOY_MDSEL} : JOY_FLAG[1] ? {6'b111111,JOY_CLK,JOY_LOAD} : '1;
 assign       USER_MODE = JOY_FLAG[2:1] ;
-assign       USER_OSD  = joydb_1[10] & joydb_1[6]; // A�adir esto para OSD
+assign       USER_OSD  = joydb_1[10] & joydb_1[6]; // A?adir esto para OSD
 
 
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
@@ -222,6 +222,7 @@ video_freak video_freak
 localparam CONF_STR = {
 	"Oric;;",
 	"F1,TAP,Load TAP file;",	
+	"h0T[53],Rewind Tape;",
 	"-;",
 	"h0T[53],Rewind Tape;",
 	"Ouv,UserIO Joystick,Off,DB9MD,DB15 ;",
@@ -239,7 +240,7 @@ localparam CONF_STR = {
 	"h4-,Drive C is Write Protected;",
 	"H5O[20],Drive D Write Protect,Off,On;",
 	"h5-,Drive D is Write Protected;",
-"-;",
+	"-;",
 	"P1,Settings;",
 	"P1O[6:5],FDD Controller,Auto,Off,On;",
 	"P1FC2,ROM,Load Alternative Bios;",
@@ -255,7 +256,8 @@ localparam CONF_STR = {
 	"H1O[4:3],ROM,Oric Atmos,Oric 1;",
 	"h1O[4:3],ROM,Oric Atmos,Oric 1,Loadable Bios;",
 	
-"-;",
+	"-;",
+	"J,Fire;",
 	"R0,Reset & Apply;",
 	"V,v",`BUILD_DATE
 };
@@ -303,7 +305,8 @@ end
 
 wire  [10:0] ps2_key;
 
-wire [15:0] joy_USB;
+wire  [15:0] joystick_0_USB;
+wire  [15:0] joystick_1_USB;
 wire   [1:0] buttons;
 wire         forced_scandoubler;
 wire [127:0] status;
@@ -335,7 +338,8 @@ wire  [21:0] gamma_bus;
 wire  [15:0] status_mask = {10'd0, img_wp, bios_loaded, tape_loaded & ~tapeUseADC & ~cas_relay};
 
 //  F4 F3 F2 F1 U D L R 
-wire [31:0] joy = joydb_1ena ? (OSD_STATUS? 32'b000000 :{joydb_1[8:7],joydb_1[5:0]}) : joy_USB;
+wire [31:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 32'b000000 :{joydb_1[8:7],joydb_1[5:0]}) : joystick_0_USB;
+wire [31:0] joystick_1 = joydb_2ena ? (OSD_STATUS? 32'b000000 :{joydb_2[8:7],joydb_2[5:0]}) : joystick_1_USB;
 
 wire [15:0] joydb_1 = JOY_FLAG[2] ? JOYDB9MD_1 : JOY_FLAG[1] ? JOYDB15_1 : '0;
 wire [15:0] joydb_2 = JOY_FLAG[2] ? JOYDB9MD_2 : JOY_FLAG[1] ? JOYDB15_2 : '0;
@@ -376,7 +380,8 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(4)) hps_io
 	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
 	.ps2_key(ps2_key),
 
-	.joystick_0(joy_USB),
+	.joystick_0(joystick_0_USB),
+	.joystick_1(joystick_1_USB),
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
 	.status(status),
@@ -499,8 +504,9 @@ oricatmos oricatmos
 	.ram_q            (ram_q),
 	.ram_oe           (),
 	.ram_we           (ram_we),
-	.joystick_0       (0),
-	.joystick_1       (0),
+	.joystick_adapter (joystick_adapter),
+	.joystick_0       (joystick_0),
+	.joystick_1       (joystick_1),
 	.fd_led           (led_disk),
 	.fdd_ready        (fdd_ready),
 	.fdd_busy         (fdd_busy),
