@@ -44,7 +44,7 @@ localparam ADDRMASK = 4'b0000;
 // 1    1   wr addr
 
 reg[3:0] addr;
-always @(posedge clock, negedge reset) 
+always @(posedge clock, negedge reset)
 	if(!reset) addr <= 1'd0;
 	else if(snap_creg_we) addr <= snap_creg;
 	else if(ce) if(bdir && bc1 && d[7:4] == ADDRMASK) addr <= d[3:0];
@@ -93,7 +93,7 @@ reg a_mode, b_mode, c_mode;
 reg a_data_io, b_data_io;
 reg e_hold, e_alternate, e_attack, e_continue;
 
-always @(posedge clock, negedge reset) 
+always @(posedge clock, negedge reset)
 	if(!reset) begin
 		a_data <= 1'd0;
 		b_data <= 1'd0;

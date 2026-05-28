@@ -181,10 +181,11 @@ always @(posedge clk_sys) begin
 				end
 			end
 
-			// Prime filecache read pipeline so snap_cache_q corresponds
-			// to mem[0] when S_HDR_TAG starts. Same shape as DMA loader's D_INIT.
+			// Prime filecache read pipeline. After this cycle, snap_cache_q
+			// at S_HDR_TAG will reflect mem[0].
 			S_INIT: begin
 				snap_cache_addr <= 18'd1;
+				hdr_byte_cnt    <= 2'd0;
 				snap_state      <= S_HDR_TAG;
 			end
 
