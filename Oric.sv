@@ -61,7 +61,7 @@ module emu
 	output        HDMI_BOB_DEINT,
 
 `ifdef MISTER_FB
-	// Use framebuffer in DDRAM
+	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
 	//    [3]   : 0=16bits 565 1=16bits 1555
@@ -243,7 +243,13 @@ assign USER_OUT = USER_OUT_DRIVE;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0; 
+assign DDRAM_CLK      = 0;
+assign DDRAM_BURSTCNT = 0;
+assign DDRAM_ADDR     = 0;
+assign DDRAM_RD       = 0;
+assign DDRAM_DIN      = 0;
+assign DDRAM_BE       = 0;
+assign DDRAM_WE       = 0;
  
 assign LED_USER    = ioctl_download | fdd_busy | tape_adc_act | led_user_pokeable;
 assign LED_DISK    = led_disk;
@@ -275,8 +281,8 @@ video_freak video_freak
 `include "build_id.v"
 localparam CONF_STR = {
 	"Oric;;",
-	"F1,TAP,Load TAP file;",	
-	"F4,SNA,Load Snapshot;",
+	"FS1,TAP,Load TAP file;",
+	"FS4,SNA,Load Snapshot;",
 	"h0T[53],Rewind Tape;",
 	"-;",
 	"h0T[53],Rewind Tape;",
@@ -285,18 +291,20 @@ localparam CONF_STR = {
 	"O[125],UserIO Players, 1 Player,2 Players;",
 	// [MiSTer-DB9-Pro END]
 "-;",
-	"S0,DSK,Mount Drive A:;",
-	"S1,DSK,Mount Drive B:;",
-	"S2,DSK,Mount Drive C:;",
-	"S3,DSK,Mount Drive D:;",
+	"h6S0,NIBDSKDO ,Mount Drive A:;",
+	"h6S1,NIBDSKDO ,Mount Drive B:;",
+	"H6S0,DSK,Mount Drive A:;",
+	"H6S1,DSK,Mount Drive B:;",
+	"H6S2,DSK,Mount Drive C:;",
+	"H6S3,DSK,Mount Drive D:;",
 	"H2O[17],Drive A Write Protect,Off,On;",
 	"h2-,Drive A is Write Protected;",
 	"H3O[18],Drive B Write Protect,Off,On;",
 	"h3-,Drive B is Write Protected;",
-	"H4O[19],Drive C Write Protect,Off,On;",
-	"h4-,Drive C is Write Protected;",
-	"H5O[20],Drive D Write Protect,Off,On;",
-	"h5-,Drive D is Write Protected;",
+	"H6H4O[19],Drive C Write Protect,Off,On;",
+	"H6h4-,Drive C is Write Protected;",
+	"H6H5O[20],Drive D Write Protect,Off,On;",
+	"H6h5-,Drive D is Write Protected;",
 	"-;",
 	"P1,Settings;",
 	"P1O[6:5],FDD Controller,Auto,Off,On;",
@@ -313,8 +321,8 @@ localparam CONF_STR = {
 	"P1O[16:15],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"P1-;",
 	"P1O[9:8],Audio,Stereo,ABC (West Europe),ACB (East Europe);",
-	"H1O[4:3],ROM,Oric Atmos,Oric 1,Pravetz 8D;",
-	"h1O[4:3],ROM,Oric Atmos,Oric 1,Pravetz 8D,Loadable Bios;",
+	"H1O[4:3],ROM,Pravetz 8D,Oric Atmos,Oric 1;",
+	"h1O[4:3],ROM,Pravetz 8D,Oric Atmos,Oric 1,Loadable Bios;",
 	
 	"-;",
 	"R0,Reset & Apply;",
@@ -344,6 +352,7 @@ pll pll
 	.rst(0),
 	.outclk_0(clk_sys),
 	.outclk_1(CLK_VIDEO),
+	.outclk_2(),
 	.locked(locked)
 );
 
@@ -408,7 +417,8 @@ wire         status_set;
 wire  [31:0] status_out;
 
 wire  [21:0] gamma_bus;
-wire  [15:0] status_mask = {10'd0, img_wp, bios_loaded, tape_loaded & ~tapeUseADC & ~cas_relay};
+wire         pravetz_layout;
+wire  [15:0] status_mask = {9'd0, pravetz_layout, img_wp, bios_loaded, tape_loaded & ~tapeUseADC & ~cas_relay};
 
 //  F4 F3 F2 F1 U D L R 
 wire [31:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 32'b000000 :{joydb_1[8:7],joydb_1[5:0]}) : joystick_0_USB;
@@ -482,7 +492,6 @@ wire [10:0] tap_autorun_ps2_key;
 wire [10:0] kbd_ps2_key = tap_autorun_active ? tap_autorun_ps2_key : ps2_key;
 wire        hps_key_strobe;
 wire        tap_autorun_key_strobe;
-wire        pravetz_layout;
 
 tap_autorun_keys tap_autorun_keys (
 	.clk_sys    (clk_sys),
@@ -682,7 +691,11 @@ oricatmos oricatmos
 
 reg [1:0] rom = 0;
 always @(posedge clk_sys) if(reset) rom <= status[4:3];
-wire [1:0] rom_sel = (rom == 2'd3 && !bios_loaded) ? 2'd0 : rom;
+wire [1:0] rom_sel =
+	(rom == 2'd0) ? 2'd2 :
+	(rom == 2'd1) ? 2'd0 :
+	(rom == 2'd2) ? 2'd1 :
+	(bios_loaded ? 2'd3 : 2'd0);
 assign pravetz_layout = (rom_sel == 2'd2);
 
 reg fdd_ready = 0;
@@ -789,6 +802,7 @@ wire [FILE_CACHE_ADDR_WIDTH-1:0] file_download_last =
   load_tape ? TAP_CACHE_LAST : FILE_CACHE_LAST;
 wire [FILE_CACHE_ADDR_WIDTH-1:0] file_download_addr =
   file_download_in_range ? ioctl_addr[FILE_CACHE_ADDR_WIDTH-1:0] : file_download_last;
+
 wire [FILE_CACHE_ADDR_WIDTH-1:0] file_selected_addr =
   file_download_active ? file_download_addr :
   snap_active          ? snap_cache_addr :
@@ -798,12 +812,15 @@ wire [FILE_CACHE_ADDR_WIDTH-1:0] file_selected_addr =
 wire [FILE_CACHE_ADDR_WIDTH-1:0] filecache_addr =
   (file_selected_addr > FILE_CACHE_LAST) ? FILE_CACHE_LAST : file_selected_addr;
 
+wire [7:0] filecache_write_data = ioctl_dout;
+wire       filecache_write_we   = ioctl_wr && (load_tape || load_sna) && file_download_in_range;
+
 spram #(.address_width(FILE_CACHE_ADDR_WIDTH), .numwords(FILE_CACHE_NUMWORDS)) filecache (
   .clock(clk_sys),
 
   .address(filecache_addr),
-  .data(ioctl_dout),
-  .wren(ioctl_wr && (load_tape || load_sna) && file_download_in_range),
+  .data(filecache_write_data),
+  .wren(filecache_write_we),
   .q(filecache_q)
 );
 
