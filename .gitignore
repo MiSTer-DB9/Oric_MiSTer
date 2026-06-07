@@ -37,3 +37,10 @@ c5_pin_model_dump.txt
 *.xml
 *_netlist
 *.cdf
+.vscode/
+vhdl_ls.toml
+temp_files/
+mister_screenshots/
+__pycache__/
+.DS_Store
+
