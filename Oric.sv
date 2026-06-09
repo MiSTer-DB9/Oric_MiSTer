@@ -435,8 +435,8 @@ wire         pravetz_layout;
 wire  [15:0] status_mask = {9'd0, pravetz_layout, img_wp, bios_loaded, tape_loaded & ~tapeUseADC & ~cas_relay};
 
 //  F4 F3 F2 F1 U D L R 
-wire [31:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 32'b000000 :{joydb_1[8:7],joydb_1[5:0]}) : joystick_0_USB;
-wire [31:0] joystick_1 = joydb_2ena ? (OSD_STATUS? 32'b000000 :{joydb_2[8:7],joydb_2[5:0]}) : joystick_1_USB;
+wire [31:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 32'b000000 :joydb_1_mapped[7:0]) : joystick_0_USB;
+wire [31:0] joystick_1 = joydb_2ena ? (OSD_STATUS? 32'b000000 :joydb_2_mapped[7:0]) : joystick_1_USB;
 
 
 
